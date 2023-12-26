@@ -4,7 +4,6 @@
 import argparse
 import logging
 import os
-import random
 import re
 import sys
 import time
@@ -13,13 +12,10 @@ from typing import List
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from google.auth.transport import requests
-from pyvirtualdisplay import Display
-from selenium import webdriver
+from lib.FbHelpers import FbHelpers
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.wait import WebDriverWait
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -42,13 +38,6 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-PROJECT_NUMBER = os.getenv("PROJECT_NUMBER")
-CLOUD_REGION = os.getenv("CLOUD_REGION")
-ZONE_ID = os.getenv("ZONE_ID")
-TOPIC_ID = os.getenv("TOPIC_ID")
-REGIONAL = os.getenv("REGIONAL") == "true"
-SUBSCRIPTION_ID = os.getenv("SUBSCRIPTION_ID")
-TIMEOUT = int(os.getenv("TIMEOUT"))
 PAGE_TO_SCRAPE = os.getenv("PAGE_TO_SCRAPE")
 POSTS_TO_SCRAPE = int(os.getenv("POSTS_TO_SCRAPE"))
 RUNNING_IN_CONTAINER = os.getenv("RUNNING_IN_CONTAINER") == "true"
@@ -56,11 +45,18 @@ FACEBOOK_EMAIL = os.getenv("FACEBOOK_EMAIL")
 FACEBOOK_PASSWORD = os.getenv("FACEBOOK_PASSWORD")
 DATA_ENDPOINT = os.getenv("DATA_ENDPOINT")
 
-# Set the service account key
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./service-account-key.json"
+KEY_PATH = "../service-account-key.json"
 
-DRIVER = None
+if not os.path.exists(KEY_PATH):
+    logger.error("No service account key found. Exiting.")
+    exit(1)
+
+# Set the service account key
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = KEY_PATH
+
 FERNET = None
+DRIVER = None
+FB_HELPER = FbHelpers()
 
 LOGGED_POSTS = {}
 
@@ -84,14 +80,6 @@ XPATHS = {
     "post_time_active_parent": "//div[@aria-posinset='1']//a[contains(@href, 'groups') and contains(@href, 'posts')]//span[contains(@style, 'flex')]",
 }
 
-if not os.path.exists("./key.txt"):
-    logger.error("No key.txt found. Exiting.")
-    exit(1)
-
-with open("./key.txt", "rb") as file:
-    key = file.read()
-    FERNET = Fernet(key)
-
 
 def main():
     """
@@ -99,8 +87,12 @@ def main():
     """
     logger.info("Starting bot.")
 
-    load_chromedriver()
-    login_to_facebook()
+    global DRIVER
+    DRIVER = FB_HELPER.load_chromedriver()
+
+    decrypted_facebook_email = decrypt_string(FACEBOOK_EMAIL)
+    decrypted_facebook_password = decrypt_string(FACEBOOK_PASSWORD)
+    FB_HELPER.login_to_facebook(decrypted_facebook_email, decrypted_facebook_password)
 
     while True:
         try:
@@ -115,174 +107,22 @@ def main():
             time.sleep(600)
 
 
-def wait_for(xpath: str, timeout: int = 10, log_error: bool = True):
+def decrypt_string(string: str) -> str:
     """
-    Wait for an element to appear on the page.
-    """
-    try:
-        WebDriverWait(DRIVER, timeout).until(
-            EC.presence_of_element_located((By.XPATH, xpath))
-        )
-        return DRIVER.find_element(By.XPATH, xpath)
-    except NoSuchElementException as e:
-        logger.error(f"Could not find element with xpath: {xpath}")
-        raise e
-
-
-def js_click(xpath: str, with_wait: bool = True):
-    """
-    Click an element using javascript.
+    Decrypt a string.
     """
 
-    if with_wait:
-        wait_for(xpath)
+    if not FERNET:
+        logger.info("Loading Fernet key.")
 
-    DRIVER.execute_script("arguments[0].click();", DRIVER.find_element(By.XPATH, xpath))
+        if not os.path.exists("./key.txt"):
+            raise Exception("No Fernet key found.")
 
+        with open("./key.txt", "rb") as f:
+            key = f.read()
+            FERNET = Fernet(key)
 
-def hover_over(xpath: str, with_wait: bool = True):
-    """
-    Hover over an element.
-    """
-
-    if with_wait:
-        wait_for(xpath)
-
-    DRIVER.execute_script("arguments[0].hover();", DRIVER.find_element(By.XPATH, xpath))
-
-
-def input_text_to_element(
-    xpath: str, text: str, with_wait: bool = True, random_delay: bool = True
-):
-    """
-    Input text to an element.
-    """
-
-    if with_wait:
-        wait_for(xpath)
-
-    element = DRIVER.find_element(By.XPATH, xpath)
-
-    if not random_delay:
-        element.send_keys(text)
-        return
-
-    for char in text:
-        element.send_keys(char)
-        # Sleep for a random amount of time between 0.1 and 0.3 seconds.
-        time.sleep(random.randint(1, 3) / 10)
-
-
-def login_to_facebook():
-    """
-    Login to Facebook.
-    """
-
-    logger.info("Logging in to Facebook.")
-
-    facebook_login_url = "https://www.facebook.com/login"
-    logger.info(f"Loading {facebook_login_url}")
-    DRIVER.get(facebook_login_url)
-
-    input_text_to_element(
-        XPATHS["email_login"], FERNET.decrypt(FACEBOOK_EMAIL).decode()
-    )
-    input_text_to_element(
-        XPATHS["password_login"],
-        FERNET.decrypt(os.getenv("FACEBOOK_PASSWORD")).decode() + "\n",
-    )
-
-    wait_for_authentication()
-
-
-def wait_for_authentication():
-    """
-    Wait for the user to authenticate the login attempt.
-    """
-
-    logger.info("Waiting for authentication.")
-
-    # Wait for the code prompt to appear.
-    waiting_for_code_prompt = False
-    try:
-        wait_for(XPATHS["code_prompt"])
-        waiting_for_code_prompt = True
-        logger.info("2FA required.")
-    except NoSuchElementException:
-        logger.info("No 2FA required.")
-
-    message_printed = False
-
-    if waiting_for_code_prompt:
-        logger.info("Waiting for authentication.")
-        # Wait for the user to authenticate the login attempt.
-        while True:
-            try:
-                wait_for(XPATHS["code_prompt"], timeout=1)
-                if not message_printed:
-                    logger.info("Waiting for 2FA.")
-                    message_printed = True
-            except NoSuchElementException:
-                logger.info("2FA successful.")
-                break
-
-    # Wait for the main feed to appear.
-    wait_for(XPATHS["main_feed"])
-    logger.info("Login successful.")
-
-
-def load_chromedriver():
-    # Get all chromedrivers in "./chromedrivers" and add them to the path, if it exists
-    if not os.path.exists("./chromedrivers"):
-        logger.info("No chromedrivers found.")
-    else:
-        logger.info("Loading chromedrivers.")
-        for file in os.listdir("./chromedrivers"):
-            if file.endswith(".exe"):
-                logger.debug(f"Adding chromedriver to path: {file}")
-                os.environ[
-                    "PATH"
-                ] += f";{os.path.join(os.getcwd(), 'chromedrivers', file)}"
-
-    # Set the driver parameters
-    parameters = [
-        "--start-maximized"
-        "--disable-popup-blocking"
-        "--disable-extensions"
-        "--incognito"
-        "--disable-infobars"
-    ]
-
-    container_parameters = [
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-    ]
-
-    # If we are running in a container, we need to use a virtual display
-    if RUNNING_IN_CONTAINER:
-        logger.info("Running in container.")
-        logger.info("Starting virtual display.")
-        display = Display(visible=0, size=(800, 600))
-        display.start()
-        logger.info("Virtual display started.")
-
-    options = webdriver.ChromeOptions()
-
-    for parameter in parameters:
-        logger.debug(f"Adding parameter: {parameter}")
-        options.add_argument(parameter)
-
-    if RUNNING_IN_CONTAINER:
-        for parameter in container_parameters:
-            logger.debug(f"Adding parameter: {parameter}")
-            options.add_argument(parameter)
-
-    logger.info("Loading chromedriver.")
-    global DRIVER
-    DRIVER = webdriver.Chrome(
-        options=options,
-    )
+    return FERNET.decrypt(string.encode()).decode()
 
 
 def load_facebook_page(page: str):
@@ -337,7 +177,7 @@ def load_inactive_a_tag(
             raise Exception("Timeout waiting for inactive a tag to load.")
 
         try:
-            hover_over(inactive_element_xpath)
+            FB_HELPER.hover_over(inactive_element_xpath)
             logger.debug("Inactive a tag still present.")
             time.sleep(wait_between)
             counter += 1
@@ -345,7 +185,7 @@ def load_inactive_a_tag(
             logger.debug("Inactive a tag not present.")
 
             # Wait for the active a tag to load
-            wait_for(active_element_xpath)
+            FB_HELPER.wait_for(active_element_xpath)
             logger.debug("Active a tag present.")
 
             break
@@ -369,7 +209,7 @@ def read_time_from_post():
         XPATHS["post_time_inactive_parent"], XPATHS["post_time_active_parent"]
     )
 
-    post_time_parent = wait_for(XPATHS["post_time_parent"])
+    post_time_parent = FB_HELPER.wait_for(XPATHS["post_time_parent"])
     children = post_time_parent.find_elements_by_xpath(".//*")
     for child in children:
         if child.get_attribute("style") == "position: relative;":
@@ -388,7 +228,7 @@ def wait_for_page_feed_to_load(wait_between: int = 1, retries: int = 10):
     Wait for the page feed to load.
     """
     logger.info("Waiting for page feed to load.")
-    page_feed = wait_for(XPATHS["page_feed"])
+    page_feed = FB_HELPER.wait_for(XPATHS["page_feed"])
 
     # The page feed loads with children but there is no data in the children.
     # We want to continue waiting until the children have data.
@@ -422,7 +262,7 @@ def load_post_page(post: WebElement):
         XPATHS["child_post_page_inactive_link"],
         XPATHS["child_post_page_active_link"],
     )
-    wait_for(XPATHS["child_post_page_active_link"])
+    FB_HELPER.wait_for(XPATHS["child_post_page_active_link"])
 
     # Get the post link
     post_link = post.find_element_by_xpath(XPATHS["child_post_page_active_link"])
@@ -519,7 +359,7 @@ def scrape_posts(page: str):
 
     # Wait for page feed to load
     wait_for_page_feed_to_load()
-    page_feed = wait_for(XPATHS["page_feed"])
+    page_feed = FB_HELPER.wait_for(XPATHS["page_feed"])
 
     # Loop through the most recent posts
     children = clean_page_feed(page_feed.find_elements(By.XPATH, ".//*"))

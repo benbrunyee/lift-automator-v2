@@ -1,5 +1,6 @@
 key.txt
-main.log
 service-account-key.json
 venv
 chromedrivers
+.env
+*.log

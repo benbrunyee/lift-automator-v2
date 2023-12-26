@@ -43,16 +43,16 @@ COPY requirements.txt /usr/src/app/requirements.txt
 RUN python3 -m venv venv && ./venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Copy the encryption key
-COPY key.txt /usr/src/app/key.txt
+COPY ./key.txt /usr/src/app/key.txt
 
 # Copy the service account key
-COPY service_account_key.json /usr/src/app/service_account_key.json
+COPY ../service_account_key.json /usr/src/app/service_account_key.json
 
 # Copy the environment variables
 COPY .env /usr/src/app/.env
 
 # Copy the code
-COPY facebook_post_getter.py /usr/src/app/facebook_post_getter.py
+COPY authenticator.py /usr/src/app/authenticator.py
 
 # Run the application
-CMD ["./venv/bin/python", "facebook_post_getter.py"]
+CMD ["./venv/bin/python", "authenticator.py"]

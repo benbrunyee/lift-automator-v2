@@ -1,5 +1,0 @@
-services:
-  lift-automator-v2-bot:
-    build: .
-    environment:
-      - RUNNING_IN_CONTAINER=true

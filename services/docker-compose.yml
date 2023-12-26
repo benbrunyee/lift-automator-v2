@@ -1,0 +1,32 @@
+services:
+  facebook_post_getter:
+    build: ./facebook_post_getter
+    environment:
+      - RUNNING_IN_CONTAINER=true
+  authenticator:
+    build: ./authenticator
+    environment:
+      - RUNNING_IN_CONTAINER=true
+  messenger:
+    build: ./messenger
+    environment:
+      - RUNNING_IN_CONTAINER=true
+  rabbitmq:
+    image: rabbitmq:3.12.10-management
+    ports:
+      - "5672:5672" # AMQP
+      - "15672:15672" # HTTP for management plugin
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    hostname: rabbitmq
+    configs:
+      - source: rabbitmq_config
+        target: /etc/rabbitmq/rabbitmq.conf
+      - source: rabbitmq_env_config
+        target: /etc/rabbitmq/rabbitmq-env.conf
+configs:
+  rabbitmq_config:
+    file: ./rabbitmq/rabbitmq.conf
+  rabbitmq_env_config:
+    file: ./rabbitmq/rabbitmq-env.conf

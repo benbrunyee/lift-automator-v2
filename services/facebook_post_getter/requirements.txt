@@ -1,0 +1,5 @@
+cryptography==41.0.7
+google-auth==2.25.2
+python-dotenv==1.0.0
+PyVirtualDisplay==3.0
+selenium==4.16.0
