@@ -46,7 +46,7 @@ RUN python3 -m venv venv && ./venv/bin/pip install --no-cache-dir -r requirement
 COPY ./facebook_post_getter/key.txt /usr/src/app/key.txt
 
 # Copy the service account key
-COPY ./lib/service_account_key.json /usr/src/app/service_account_key.json
+COPY ./lib/service-account-key.json /usr/src/app/service-account-key.json
 
 # Copy the environment variables
 COPY ./facebook_post_getter/.env /usr/src/app/.env
