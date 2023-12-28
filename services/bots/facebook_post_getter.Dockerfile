@@ -37,22 +37,23 @@ RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 
 # Copy the requirements.txt first for better cache on later pushes
-COPY requirements.txt /usr/src/app/requirements.txt
+COPY ./facebook_post_getter/requirements.txt /usr/src/app/requirements.txt
 
 # Install dependencies
 RUN python3 -m venv venv && ./venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Copy the encryption key
-COPY ../key.txt /usr/src/app/key.txt
+COPY ./facebook_post_getter/key.txt /usr/src/app/key.txt
 
 # Copy the service account key
-COPY ../service_account_key.json /usr/src/app/service_account_key.json
+COPY ./lib/service_account_key.json /usr/src/app/service_account_key.json
 
 # Copy the environment variables
-COPY .env /usr/src/app/.env
+COPY ./facebook_post_getter/.env /usr/src/app/.env
 
 # Copy the code
-COPY messenger.py /usr/src/app/messenger.py
+COPY ./lib /usr/src/app/lib
+COPY ./facebook_post_getter/facebook_post_getter.py /usr/src/app/facebook_post_getter.py
 
 # Run the application
-CMD ["./venv/bin/python", "messenger.py"]
+CMD ["./venv/bin/python", "facebook_post_getter.py"]

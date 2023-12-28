@@ -37,22 +37,22 @@ RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 
 # Copy the requirements.txt first for better cache on later pushes
-COPY requirements.txt /usr/src/app/requirements.txt
+COPY ./messenger/requirements.txt /usr/src/app/requirements.txt
 
 # Install dependencies
 RUN python3 -m venv venv && ./venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Copy the encryption key
-COPY ./key.txt /usr/src/app/key.txt
+COPY ./messenger/key.txt /usr/src/app/key.txt
 
 # Copy the service account key
-COPY ../service_account_key.json /usr/src/app/service_account_key.json
+COPY ./lib/service_account_key.json /usr/src/app/service_account_key.json
 
 # Copy the environment variables
-COPY .env /usr/src/app/.env
+COPY ./messenger/.env /usr/src/app/.env
 
 # Copy the code
-COPY authenticator.py /usr/src/app/authenticator.py
+COPY ./messenger/messenger.py /usr/src/app/messenger.py
 
 # Run the application
-CMD ["./venv/bin/python", "authenticator.py"]
+CMD ["./venv/bin/python", "messenger.py"]

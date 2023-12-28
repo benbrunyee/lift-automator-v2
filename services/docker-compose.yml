@@ -1,6 +1,8 @@
 services:
   facebook_post_getter:
-    build: ./facebook_post_getter
+    build:
+      context: ./bots
+      dockerfile: facebook_post_getter.Dockerfile
     environment:
       - RUNNING_IN_CONTAINER=true
 #   authenticator:
